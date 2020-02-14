@@ -29,6 +29,14 @@ Bare-bones Spring Boot microservice used for demo purposes. Not supported - no w
 `kubectl apply -f deploy/kubernetes/kube-deploy.yaml`
 - Navigate to: `http://localhost:30001/promotion/`
 
+## Example POST call:
+```bash
+curl -i \
+-H "Accept: application/json" \
+-H "Content-Type:application/json" \
+-X POST --data '{"cartId": "1234", "productId": "5678", "quantity": "9", "couponId": "abcd"}' "http://localhost:8080/promotion/"
+```
+
 ## Generate some load:
 - Place the script below in a file called `promotion-generate-load.sh`.
 - Call the script with a single argument that defines how many times to call the service: `./promotion-generate-load.sh 1000`
