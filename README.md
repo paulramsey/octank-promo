@@ -45,7 +45,7 @@ fi
 x=0;
 while [ $x -le $1 ];
 do
-   curl http://tax:8080/promotion/;
+   curl http://promo:8080/promotion/;
    echo " ";
    x=$(( $x + 1 ));
 done
