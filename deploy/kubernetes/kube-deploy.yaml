@@ -1,0 +1,47 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: promotion
+  namespace: sock-shop
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        name: promotion
+    spec:
+      containers:
+      - name: promotion
+        image: 715977739758.dkr.ecr.us-east-2.amazonaws.com/promotion:latest
+        resources:
+          requests:
+            cpu: 100m
+            memory: 100Mi
+        ports:
+        - containerPort: 8080
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+              - all
+          readOnlyRootFilesystem: false
+      nodeSelector:
+        beta.kubernetes.io/os: linux
+      imagePullSecrets:
+      - name: us-east-2-ecr-registry
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: promo
+  labels:
+    name: promo
+  namespace: sock-shop
+spec:
+  type: NodePort
+  ports:
+  - port: 8080
+    targetPort: 8080
+  selector:
+    name: promotion
