@@ -8,8 +8,8 @@ public class ResponseObject {
     String cartId;
     String productId;
     String couponId;
-    String eligible;
-    String actionable;
+    String productEligible;
+    String couponValid;
     String discountAmount;
 
     // Constructor
@@ -17,8 +17,8 @@ public class ResponseObject {
         this.cartId = cid;
         this.productId = pid;
         this.couponId = cod;
-        this.eligible = elg;
-        this.actionable = act;
+        this.productEligible = elg;
+        this.couponValid = act;
         this.discountAmount = dis;
     }
 
@@ -27,8 +27,8 @@ public class ResponseObject {
         returnObject.put("cartId", this.cartId);
         returnObject.put("productId", this.productId);
         returnObject.put("couponId", this.couponId);
-        returnObject.put("eligible", this.eligible);
-        returnObject.put("actionable", this.actionable);
+        returnObject.put("productEligible", this.productEligible);
+        returnObject.put("couponValid", this.couponValid);
         returnObject.put("discountAmount", this.discountAmount);
         return returnObject;
     }

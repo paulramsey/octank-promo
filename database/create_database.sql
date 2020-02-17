@@ -3,8 +3,8 @@
     String cartId = "1234"; # Derived
     String productId = "5678"; 
     String couponId = "4321";
-    String eligible = "true";
-    String actionable = "true"; # Derived
+    String product_eligible = "true";
+    String couponValid = "true"; # Derived
     String discountAmount = "0.15";
 */
 
@@ -29,28 +29,27 @@ CREATE TABLE product_promotion (
   id int(10) unsigned NOT NULL AUTO_INCREMENT,
   coupon_id int(10) unsigned NOT NULL,
   product_id int(10) unsigned NOT NULL,
-  eligible boolean NOT NULL,
-  actionable boolean NOT NULL,
+  product_eligible boolean NOT NULL,
   PRIMARY KEY (id),
   FOREIGN KEY (coupon_id) REFERENCES coupon (id) 
     ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE = InnoDB, AUTO_INCREMENT=10000;
 
-INSERT INTO product_promotion (`coupon_id`, `product_id`, `eligible`, `actionable`)
-VALUES (10000, '12345', true, true),
-       (10000, '54321', true, true),
-       (10000, '67890', true, true),
-       (10000, '98765', true, true),
-       (10000, '45634', true, true),
-       (10001, '12345', false, false),
-       (10001, '54321', false, false),
-       (10001, '67890', false, false),
-       (10001, '98765', false, false),
-       (10001, '45634', false, false);
+INSERT INTO product_promotion (`coupon_id`, `product_id`, `product_eligible`)
+VALUES (10000, '12345', true),
+       (10000, '54321', true),
+       (10000, '67890', true),
+       (10000, '98765', true),
+       (10000, '45634', true),
+       (10001, '12345', false),
+       (10001, '54321', false),
+       (10001, '67890', false),
+       (10001, '98765', false),
+       (10001, '45634', false);
 
 SELECT * FROM product_promotion;
 
-SELECT pp.product_id, c.id AS 'coupon_id', pp.eligible, pp.actionable, c.discount_amount
+SELECT pp.product_id, c.id AS 'coupon_id', pp.product_eligible, c.valid AS 'coupon_valid', c.discount_amount
 FROM coupon c
 INNER JOIN product_promotion pp;
 

@@ -5,6 +5,7 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Map;
+import java.util.HashMap;
 
 import org.springframework.boot.web.server.WebServerFactoryCustomizer;
 import org.springframework.boot.web.servlet.server.ConfigurableServletWebServerFactory;
@@ -30,55 +31,34 @@ public class PromotionController {
 	@ResponseBody
 	public ResponseObject postResponseController(@RequestBody CartData cartData) {
 
+		// Initialize variable defaults
 		String cartId = cartData.cartId;
 		String productId = cartData.productId;
 		String couponId = cartData.couponId;
-		String eligible = "true";
-		String actionable = "true";
-		String discountAmount = "0.15";
+		String discountAmount = "0.00";
+		String productEligible = "false";
+		
+		// Initialize database variables
+		String dbUser = "octank_user";
+		String dbPass = "Octank1234";
+		String connectionString = "jdbc:mysql://octank-database-1.cluster-cnllg3hg8vf5.us-east-2.rds.amazonaws.com/Octank";
+		String dbDriver = "com.mysql.jdbc.Driver";
 
-		boolean isCouponValid = isCouponValid();
-		boolean doesCouponApplyToProduct = doesCouponApplyToProduct();
+		// Check if coupon is valid
+		boolean isCouponValid = isCouponValid(couponId, dbDriver, connectionString, dbUser, dbPass);
+		String couponValid = String.valueOf(isCouponValid);
 
-		// Query database
-		try {
-			// create our mysql database connection
-			String myDriver = "com.mysql.jdbc.Driver";
-			String myUrl = "jdbc:mysql://octank-database-1.cluster-cnllg3hg8vf5.us-east-2.rds.amazonaws.com/Octank";
-			Class.forName(myDriver);
-			Connection conn = DriverManager.getConnection(myUrl, "octank_user", "Octank1234");
-			
-			// our SQL SELECT query. 
-			// if you only need a few columns, specify them by name instead of using "*"
-			String query = "SELECT pp.product_id, c.id AS 'coupon_id', pp.eligible, pp.actionable, c.discount_amount FROM coupon c INNER JOIN product_promotion pp;";
-
-			// create the java statement
-			Statement st = conn.createStatement();
-			
-			// execute the query, and get a java resultset
-			ResultSet rs = st.executeQuery(query);
-			
-			// iterate through the java resultset
-			while (rs.next())
-			{
-				int product_id = rs.getInt("product_id");
-				String coupon_id = rs.getString("coupon_id");
-				boolean eligible_l = rs.getBoolean("eligible");
-				boolean actionable_l = rs.getBoolean("actionable");
-				double discount_amount = rs.getDouble("discount_amount");
-				
-				// print the results
-				System.out.format("%s, %s, %s, %s, %s\n", product_id, coupon_id, eligible_l, actionable_l, discount_amount);
-			}
-			
-			st.close();
+		// If coupon is valid, check whether it applies to the product passed in the request
+		if (couponValid.equals("true")) {
+			Map<String, String> productDetails = couponProductDetails(couponId, productId, dbDriver, connectionString, dbUser, dbPass);
+			productEligible = productDetails.get("productEligible");
+			if (productEligible.equals("true")) {
+				discountAmount = productDetails.get("discountAmount");
+			}  
 		}
-		catch (Exception e) {
-			System.err.println("Query failed! ");
-			System.err.println(e.getMessage());
-		}
-
-		return new ResponseObject(cartId, productId, couponId, eligible, actionable, discountAmount);
+		
+		// Return response payload
+		return new ResponseObject(cartId, productId, couponId, productEligible, couponValid, discountAmount);
 	}
 
 	@Bean
@@ -98,17 +78,89 @@ public class PromotionController {
 		return factory -> factory.setContextPath(contextPath);
 	}
 
-	private static boolean isCouponValid() {
+	// Check if the coupon is valid
+	private static boolean isCouponValid(String couponId, String dbDriver, String connectionString, String dbUser, String dbPass) {
 		// Check cache/database to check whether coupon is valid
-		return true;
+		// Query database
+		boolean valid = false;
+		try {
+			// create our mysql database connection
+			Class.forName(dbDriver);
+			Connection conn = DriverManager.getConnection(connectionString, dbUser, dbPass);
+			
+			// our SQL SELECT query. 
+			// if you only need a few columns, specify them by name instead of using "*"
+			String query = "SELECT `id`, `valid` FROM `coupon` WHERE `id` = '" + couponId + "';";
+
+			// create the java statement
+			Statement st = conn.createStatement();
+			
+			// execute the query, and get a java resultset
+			ResultSet rs = st.executeQuery(query);
+			
+			// iterate through the java resultset
+			while (rs.next())
+			{
+				String coupon_id = rs.getString("id");
+				valid = rs.getBoolean("valid");
+				
+				// print the results
+				System.out.format("%s, %s\n", coupon_id, valid);
+			}
+			
+			st.close();
+		}
+		catch (Exception e) {
+			System.err.println("Coupon query failed! ");
+			System.err.println(e.getMessage());
+		}
+		return valid;
 	}
 
-	private static boolean doesCouponApplyToProduct() {
+	// Get product promotion details
+	private static Map<String, String> couponProductDetails(String couponId, String productId, String dbDriver, String connectionString, String dbUser, String dbPass) {
 		// Check cache/database to check whether coupon applies to product
-		return true;
+		boolean productEligible = false;
+		double discountAmount = 0.00;
+		try {
+			// create our mysql database connection
+			Class.forName(dbDriver);
+			Connection conn = DriverManager.getConnection(connectionString, dbUser, dbPass);
+			
+			// our SQL SELECT query. 
+			// if you only need a few columns, specify them by name instead of using "*"
+			String query = "SELECT pp.product_eligible, c.discount_amount";
+			query += " FROM coupon c";
+			query += " INNER JOIN product_promotion pp ON c.id = pp.coupon_id";
+			query += " WHERE c.id = '" + couponId + "' AND pp.product_id = '" + productId + "';";
+
+			// create the java statement
+			Statement st = conn.createStatement();
+			
+			// execute the query, and get a java resultset
+			ResultSet rs = st.executeQuery(query);
+			
+			// iterate through the java resultset
+			while (rs.next())
+			{
+				productEligible = rs.getBoolean("product_eligible");
+				discountAmount = rs.getDouble("discount_amount");
+				// print the results
+				System.out.format("%s, %s\n", productEligible, discountAmount);
+			}
+			
+			st.close();
+		}
+		catch (Exception e) {
+			System.err.println("Coupon query failed! ");
+			System.err.println(e.getMessage());
+		}
+		
+		Map<String, String> returnObject = new HashMap<String, String>();
+		returnObject.put("productEligible", String.valueOf(productEligible));
+		returnObject.put("discountAmount", String.valueOf(discountAmount));
+		
+		return returnObject;
 	}
 
-	private static ResultSet runSql(String stmt) {
-
-	}
 }
