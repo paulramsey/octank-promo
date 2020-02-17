@@ -23,10 +23,6 @@ public class ResponseObject {
     }
 
     public Map<String, String> getResponseObject() {
-        Map<String, String> map = new HashMap<String, String>();
-        map.put("dog", "type of animal");
-        System.out.println(map.get("dog"));
-        
         Map<String, String> returnObject = new HashMap<String, String>();
         returnObject.put("cartId", this.cartId);
         returnObject.put("productId", this.productId);
