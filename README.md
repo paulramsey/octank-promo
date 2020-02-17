@@ -2,6 +2,32 @@
 
 Bare-bones Spring Boot microservice used for demo purposes. Not supported - no warranty explicit or implied.
 
+API checks whether the coupon code applied at checkout is valid and applies to the products in the user's cart.
+
+Example cart data POST input:
+```json
+{
+    "cartId": "208474",
+    "productId": "12345",
+    "quantity": "9",
+    "couponId": "10000"
+}
+```
+
+Example API response:
+```json
+{
+    "responseObject": {
+        "couponValid": "true",
+        "productId": "12345",
+        "cartId": "1234",
+        "productEligible": "true",
+        "discountAmount": "0.25",
+        "couponId": "10000"
+    }
+}
+```
+
 ## Pre-requisites
 - Install Maven and Java 8
 - Install and configure AWS CLI 
@@ -34,7 +60,7 @@ Bare-bones Spring Boot microservice used for demo purposes. Not supported - no w
 curl -i \
 -H "Accept: application/json" \
 -H "Content-Type:application/json" \
--X POST --data '{"cartId": "1234", "productId": "5678", "quantity": "9", "couponId": "abcd"}' "http://localhost:8080/promotion/"
+-X POST --data '{"cartId": "208474", "productId": "12345", "quantity": "9", "couponId": "10000"}' "http://localhost:8080/promotion/"
 ```
 
 ## Generate some load:
