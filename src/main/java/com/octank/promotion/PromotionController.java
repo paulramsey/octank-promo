@@ -7,8 +7,7 @@ import java.sql.Statement;
 import java.util.HashMap;
 import java.util.Map;
 
-import redis.clients.jedis.Jedis; 
-
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.server.WebServerFactoryCustomizer;
 import org.springframework.boot.web.servlet.server.ConfigurableServletWebServerFactory;
 import org.springframework.context.annotation.Bean;
@@ -19,16 +18,28 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 
+import redis.clients.jedis.Jedis;
+
 @RestController
 @RequestMapping("/")
 public class PromotionController {
+	
+	// Get config values
+	@Value("${cache.enabled}") boolean cacheEnabled;
+	@Value("${redis.server}") String redisConn;
+	@Value("${database.user}") String dbUser;
+	@Value("${database.password}") String dbPass;
+	@Value("${database.connection.string}") String connectionString;
+	@Value("${database.driver}") String dbDriver;
 
+	// Get mapping for basic sanity check
 	@GetMapping
 	public String index() {
 		String rtrn = "You called the Promotion microservice!";
 		return rtrn;
 	}
 
+	// Post mapping for main functionality
 	@PostMapping
 	@ResponseBody
 	public ResponseObject postResponseController(@RequestBody CartData cartData) {
@@ -39,16 +50,10 @@ public class PromotionController {
 		String couponId = cartData.couponId;
 		String discountAmount = "0.00";
 		String productEligible = "false";
-		
-		// Initialize database variables
-		String dbUser = "octank_user";
-		String dbPass = "Octank1234";
-		String connectionString = "jdbc:mysql://octank-database-1.cluster-cnllg3hg8vf5.us-east-2.rds.amazonaws.com/Octank?useSSL=false";
-		String dbDriver = "com.mysql.jdbc.Driver";
 
 		/*
 		// Test redis
-		Jedis j = new Jedis("localhost", 6379);
+		Jedis j = new Jedis(redisConn, 6379);
 		System.out.println("Connection to server sucessfully"); 
 		//check whether server is running or not 
 		System.out.println("Server is running: "+j.ping()); 
@@ -57,14 +62,12 @@ public class PromotionController {
 		j.close();
 		*/
 
-		String redisConn = "localhost";
-
 		// Check if coupon is valid
-		String couponValid = isCouponValid(couponId, dbDriver, connectionString, dbUser, dbPass, redisConn);
+		String couponValid = isCouponValid(couponId, dbDriver, connectionString, dbUser, dbPass, redisConn, cacheEnabled);
 
 		// If coupon is valid, check whether it applies to the product passed in the request
 		if (couponValid.equals("true")) {
-			Map<String, String> productDetails = couponProductDetails(couponId, productId, dbDriver, connectionString, dbUser, dbPass, redisConn);
+			Map<String, String> productDetails = couponProductDetails(couponId, productId, dbDriver, connectionString, dbUser, dbPass, redisConn, cacheEnabled);
 			productEligible = productDetails.get("productEligible");
 			if (productEligible.equals("true")) {
 				discountAmount = productDetails.get("discountAmount");
@@ -94,7 +97,7 @@ public class PromotionController {
 
 
 	// Check if the coupon is valid
-	private static String isCouponValid(String couponId, String dbDriver, String connectionString, String dbUser, String dbPass, String redisConn) {
+	private static String isCouponValid(String couponId, String dbDriver, String connectionString, String dbUser, String dbPass, String redisConn, boolean cacheEnabled) {
 		// Check cache/database to check whether coupon is valid
 		// Query database
 		String valid = "false";
@@ -103,15 +106,20 @@ public class PromotionController {
 		// if you only need a few columns, specify them by name instead of using "*"
 		String query = "SELECT `valid` FROM `coupon` WHERE `id` = '" + couponId + "';";
 		
-
-		Jedis j = new Jedis(redisConn, 6379);
 		//System.out.println("Connection to server sucessfully"); 
 		//System.out.println("Server is running: "+j.ping()); 
 		
-		String redisResult = j.get(query);
+		String redisResult = null;
+
+		if (cacheEnabled) {
+			Jedis j = new Jedis(redisConn, 6379);
+			redisResult = j.get(query);
+			j.close();
+		}
+		
 		if (redisResult != null) {
 			valid = redisResult;
-			System.out.println("Got value for Valid from cache!");
+			//System.out.println("Got value for Valid from cache!");
 		} else {
 			try {
 				// create our mysql database connection
@@ -130,19 +138,22 @@ public class PromotionController {
 					valid = String.valueOf(rs.getBoolean("valid"));
 					
 					// print the results
-					System.out.format("%s, %s\n", couponId, valid);
+					//System.out.format("%s, %s\n", couponId, valid);
+					System.out.println("Cache miss or cache disabled. Data retrieved from database.");
 				}
 				
 				rs.close();
 				st.close();
 				conn.close();
 
-				// Save the value to cache
-				j.set(query, valid);
-				j.expire(query, 10);
-				//System.out.println("Storing string " + j.get(query) + " in redis for key " + query);
-				j.close();
-
+				if (cacheEnabled) {
+					// Save the value to cache
+					Jedis j = new Jedis(redisConn, 6379);
+					j.set(query, valid);
+					j.expire(query, 60);
+					//System.out.println("Storing string " + j.get(query) + " in redis for key " + query);
+					j.close();	
+				}
 			}
 			catch (Exception e) {
 				System.err.println("Coupon query failed! ");
@@ -154,7 +165,7 @@ public class PromotionController {
 	}
 
 	// Get product promotion details
-	private static Map<String, String> couponProductDetails(String couponId, String productId, String dbDriver, String connectionString, String dbUser, String dbPass, String redisConn) {
+	private static Map<String, String> couponProductDetails(String couponId, String productId, String dbDriver, String connectionString, String dbUser, String dbPass, String redisConn, boolean cacheEnabled) {
 		// Check cache/database to check whether coupon applies to product
 		String productEligible = "false";
 		String discountAmount = "0.00";
@@ -165,17 +176,20 @@ public class PromotionController {
 		query += " FROM coupon c";
 		query += " INNER JOIN product_promotion pp ON c.id = pp.coupon_id";
 		query += " WHERE c.id = '" + couponId + "' AND pp.product_id = '" + productId + "';";
-
-		Jedis j = new Jedis(redisConn, 6379);
-		//System.out.println("Connection to server sucessfully"); 
-		//System.out.println("Server is running: "+j.ping()); 
 		
-		String redisResult = j.get(query);
+		// Connect to redis if enabled
+		String redisResult = null;
+		if (cacheEnabled) {
+			Jedis j = new Jedis(redisConn, 6379);
+			redisResult = j.get(query);
+			j.close();
+		} 
+
 		if (redisResult != null) {
 			String[] splitResult = redisResult.split("_");
 			productEligible = splitResult[0];
 			discountAmount = splitResult[1];
-			System.out.println("Got value for productEligible and discountAmount from cache!");
+			//System.out.println("Got value for productEligible and discountAmount from cache!");
 		} else {
 			try {
 				// create our mysql database connection
@@ -194,18 +208,24 @@ public class PromotionController {
 					productEligible = String.valueOf(rs.getBoolean("product_eligible"));
 					discountAmount = String.valueOf(rs.getDouble("discount_amount"));
 					// print the results
-					System.out.format("%s, %s\n", productEligible, discountAmount);
+					//System.out.format("%s, %s\n", productEligible, discountAmount);
+					System.out.println("Cache miss or cache disabled. Data retrieved from database.");
 				}
 				
+				// Close DB objects
 				rs.close();
 				st.close();
 				conn.close();
 
-				// Save the value to cache
-				j.set(query, productEligible + "_" + discountAmount);
-				j.expire(query, 10);
-				//System.out.println("Storing string " + j.get(query) + " in redis for key " + query);
-				j.close();
+				if (cacheEnabled) {
+					// Save the value to cache
+					Jedis j = new Jedis(redisConn, 6379);
+					j.set(query, productEligible + "_" + discountAmount);
+					j.expire(query, 60);
+					j.close();
+				}
+				
+
 			}
 			catch (Exception e) {
 				System.err.println("Coupon query failed! ");

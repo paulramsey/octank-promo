@@ -1,17 +1,21 @@
 package com.octank.promotion;
 
+import java.util.Arrays;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.web.servlet.support.SpringBootServletInitializer;
 import org.springframework.boot.builder.SpringApplicationBuilder;
-import java.util.Arrays;
-import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.web.servlet.support.SpringBootServletInitializer;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 
 @SpringBootApplication
 public class PromotionApplication extends SpringBootServletInitializer {
 
+	@Value("${cache.enabled}") String cacheEnabled;
+	
 	@Override
 	protected SpringApplicationBuilder configure(SpringApplicationBuilder application) {
 		return application.sources(PromotionApplication.class);
@@ -31,6 +35,8 @@ public class PromotionApplication extends SpringBootServletInitializer {
 			for (String beanName : beanNames) {
 				System.out.println(beanName);
 			}
+
+			System.out.println("Cache enabled?: " + cacheEnabled);
 
 		};
 	}
