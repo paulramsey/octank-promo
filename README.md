@@ -72,15 +72,15 @@ curl -i \
 
 if [ $# -eq 0 ]
 then
-   echo "Error: You must provide an interger in position 1 to indicate the number of calls the script should make to the promotion service."
-   exit
+    echo "Error: You must provide an interger in position 1 to indicate the number of calls the script should make to the promotion service."
+    exit
 fi
 
 x=0;
 while [ $x -le $1 ];
 do
-   curl http://promo:8080/promotion/;
-   echo " ";
-   x=$(( $x + 1 ));
+    curl -H "Accept: application/json" -H "Content-Type:application/json" -X POST --data '{"cartId": "1234", "productId": "12345", "quantity": "9", "couponId": "10000"}' "http://localhost:8080/promotion/" &
+    echo " ";
+    x=$(( $x + 1 ));
 done
 ```

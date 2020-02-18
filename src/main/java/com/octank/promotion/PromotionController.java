@@ -4,8 +4,10 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
-import java.util.Map;
 import java.util.HashMap;
+import java.util.Map;
+
+import redis.clients.jedis.Jedis; 
 
 import org.springframework.boot.web.server.WebServerFactoryCustomizer;
 import org.springframework.boot.web.servlet.server.ConfigurableServletWebServerFactory;
@@ -41,16 +43,28 @@ public class PromotionController {
 		// Initialize database variables
 		String dbUser = "octank_user";
 		String dbPass = "Octank1234";
-		String connectionString = "jdbc:mysql://octank-database-1.cluster-cnllg3hg8vf5.us-east-2.rds.amazonaws.com/Octank";
+		String connectionString = "jdbc:mysql://octank-database-1.cluster-cnllg3hg8vf5.us-east-2.rds.amazonaws.com/Octank?useSSL=false";
 		String dbDriver = "com.mysql.jdbc.Driver";
 
+		/*
+		// Test redis
+		Jedis j = new Jedis("localhost", 6379);
+		System.out.println("Connection to server sucessfully"); 
+		//check whether server is running or not 
+		System.out.println("Server is running: "+j.ping()); 
+		j.set("tutorial-name", "Redis tutorial");
+		System.out.println("Sotring string in redis:: " + j.get("tutorial-name"));
+		j.close();
+		*/
+
+		String redisConn = "localhost";
+
 		// Check if coupon is valid
-		boolean isCouponValid = isCouponValid(couponId, dbDriver, connectionString, dbUser, dbPass);
-		String couponValid = String.valueOf(isCouponValid);
+		String couponValid = isCouponValid(couponId, dbDriver, connectionString, dbUser, dbPass, redisConn);
 
 		// If coupon is valid, check whether it applies to the product passed in the request
 		if (couponValid.equals("true")) {
-			Map<String, String> productDetails = couponProductDetails(couponId, productId, dbDriver, connectionString, dbUser, dbPass);
+			Map<String, String> productDetails = couponProductDetails(couponId, productId, dbDriver, connectionString, dbUser, dbPass, redisConn);
 			productEligible = productDetails.get("productEligible");
 			if (productEligible.equals("true")) {
 				discountAmount = productDetails.get("discountAmount");
@@ -78,87 +92,132 @@ public class PromotionController {
 		return factory -> factory.setContextPath(contextPath);
 	}
 
+
 	// Check if the coupon is valid
-	private static boolean isCouponValid(String couponId, String dbDriver, String connectionString, String dbUser, String dbPass) {
+	private static String isCouponValid(String couponId, String dbDriver, String connectionString, String dbUser, String dbPass, String redisConn) {
 		// Check cache/database to check whether coupon is valid
 		// Query database
-		boolean valid = false;
-		try {
-			// create our mysql database connection
-			Class.forName(dbDriver);
-			Connection conn = DriverManager.getConnection(connectionString, dbUser, dbPass);
-			
-			// our SQL SELECT query. 
-			// if you only need a few columns, specify them by name instead of using "*"
-			String query = "SELECT `id`, `valid` FROM `coupon` WHERE `id` = '" + couponId + "';";
+		String valid = "false";
 
-			// create the java statement
-			Statement st = conn.createStatement();
-			
-			// execute the query, and get a java resultset
-			ResultSet rs = st.executeQuery(query);
-			
-			// iterate through the java resultset
-			while (rs.next())
-			{
-				String coupon_id = rs.getString("id");
-				valid = rs.getBoolean("valid");
+		// our SQL SELECT query. 
+		// if you only need a few columns, specify them by name instead of using "*"
+		String query = "SELECT `valid` FROM `coupon` WHERE `id` = '" + couponId + "';";
+		
+
+		Jedis j = new Jedis(redisConn, 6379);
+		//System.out.println("Connection to server sucessfully"); 
+		//System.out.println("Server is running: "+j.ping()); 
+		
+		String redisResult = j.get(query);
+		if (redisResult != null) {
+			valid = redisResult;
+			System.out.println("Got value for Valid from cache!");
+		} else {
+			try {
+				// create our mysql database connection
+				Class.forName(dbDriver);
+				Connection conn = DriverManager.getConnection(connectionString, dbUser, dbPass);
+	
+				// create the java statement
+				Statement st = conn.createStatement();
 				
-				// print the results
-				System.out.format("%s, %s\n", coupon_id, valid);
+				// execute the query, and get a java resultset
+				ResultSet rs = st.executeQuery(query);
+				
+				// iterate through the java resultset
+				while (rs.next())
+				{
+					valid = String.valueOf(rs.getBoolean("valid"));
+					
+					// print the results
+					System.out.format("%s, %s\n", couponId, valid);
+				}
+				
+				rs.close();
+				st.close();
+				conn.close();
+
+				// Save the value to cache
+				j.set(query, valid);
+				j.expire(query, 10);
+				//System.out.println("Storing string " + j.get(query) + " in redis for key " + query);
+				j.close();
+
 			}
-			
-			st.close();
+			catch (Exception e) {
+				System.err.println("Coupon query failed! ");
+				System.err.println(e.getMessage());
+			}
 		}
-		catch (Exception e) {
-			System.err.println("Coupon query failed! ");
-			System.err.println(e.getMessage());
-		}
+
 		return valid;
 	}
 
 	// Get product promotion details
-	private static Map<String, String> couponProductDetails(String couponId, String productId, String dbDriver, String connectionString, String dbUser, String dbPass) {
+	private static Map<String, String> couponProductDetails(String couponId, String productId, String dbDriver, String connectionString, String dbUser, String dbPass, String redisConn) {
 		// Check cache/database to check whether coupon applies to product
-		boolean productEligible = false;
-		double discountAmount = 0.00;
-		try {
-			// create our mysql database connection
-			Class.forName(dbDriver);
-			Connection conn = DriverManager.getConnection(connectionString, dbUser, dbPass);
-			
-			// our SQL SELECT query. 
-			// if you only need a few columns, specify them by name instead of using "*"
-			String query = "SELECT pp.product_eligible, c.discount_amount";
-			query += " FROM coupon c";
-			query += " INNER JOIN product_promotion pp ON c.id = pp.coupon_id";
-			query += " WHERE c.id = '" + couponId + "' AND pp.product_id = '" + productId + "';";
+		String productEligible = "false";
+		String discountAmount = "0.00";
 
-			// create the java statement
-			Statement st = conn.createStatement();
-			
-			// execute the query, and get a java resultset
-			ResultSet rs = st.executeQuery(query);
-			
-			// iterate through the java resultset
-			while (rs.next())
-			{
-				productEligible = rs.getBoolean("product_eligible");
-				discountAmount = rs.getDouble("discount_amount");
-				// print the results
-				System.out.format("%s, %s\n", productEligible, discountAmount);
+		// our SQL SELECT query. 
+		// if you only need a few columns, specify them by name instead of using "*"
+		String query = "SELECT pp.product_eligible, c.discount_amount";
+		query += " FROM coupon c";
+		query += " INNER JOIN product_promotion pp ON c.id = pp.coupon_id";
+		query += " WHERE c.id = '" + couponId + "' AND pp.product_id = '" + productId + "';";
+
+		Jedis j = new Jedis(redisConn, 6379);
+		//System.out.println("Connection to server sucessfully"); 
+		//System.out.println("Server is running: "+j.ping()); 
+		
+		String redisResult = j.get(query);
+		if (redisResult != null) {
+			String[] splitResult = redisResult.split("_");
+			productEligible = splitResult[0];
+			discountAmount = splitResult[1];
+			System.out.println("Got value for productEligible and discountAmount from cache!");
+		} else {
+			try {
+				// create our mysql database connection
+				Class.forName(dbDriver);
+				Connection conn = DriverManager.getConnection(connectionString, dbUser, dbPass);
+	
+				// create the java statement
+				Statement st = conn.createStatement();
+				
+				// execute the query, and get a java resultset
+				ResultSet rs = st.executeQuery(query);
+				
+				// iterate through the java resultset
+				while (rs.next())
+				{
+					productEligible = String.valueOf(rs.getBoolean("product_eligible"));
+					discountAmount = String.valueOf(rs.getDouble("discount_amount"));
+					// print the results
+					System.out.format("%s, %s\n", productEligible, discountAmount);
+				}
+				
+				rs.close();
+				st.close();
+				conn.close();
+
+				// Save the value to cache
+				j.set(query, productEligible + "_" + discountAmount);
+				j.expire(query, 10);
+				//System.out.println("Storing string " + j.get(query) + " in redis for key " + query);
+				j.close();
 			}
-			
-			st.close();
-		}
-		catch (Exception e) {
-			System.err.println("Coupon query failed! ");
-			System.err.println(e.getMessage());
+			catch (Exception e) {
+				System.err.println("Coupon query failed! ");
+				System.err.println(e.getMessage());
+			}
 		}
 		
+		
+		
 		Map<String, String> returnObject = new HashMap<String, String>();
-		returnObject.put("productEligible", String.valueOf(productEligible));
-		returnObject.put("discountAmount", String.valueOf(discountAmount));
+		returnObject.put("productEligible", productEligible);
+		returnObject.put("discountAmount", discountAmount);
 		
 		return returnObject;
 	}
