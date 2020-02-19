@@ -69,18 +69,32 @@ curl -i \
 
 ```bash
 #!/bin/bash
-
 if [ $# -eq 0 ]
 then
     echo "Error: You must provide an interger in position 1 to indicate the number of calls the script should make to the promotion service."
     exit
 fi
 
+# Define coupon and product arrays
+couponsArr=(10000 10001 10002 10003 10004 10005 10006 10007 10008 10009);
+productsArr=(20000 20001 20002 20003 20004);
+
+# Seed random generator
+RANDOM=$$$(date +%s)
+
+# Run API call loop
 x=0;
 while [ $x -le $1 ];
 do
-    curl -H "Accept: application/json" -H "Content-Type:application/json" -X POST --data '{"cartId": "1234", "productId": "12345", "quantity": "9", "couponId": "10000"}' "http://localhost:8080/promotion/" &
+    selectedCoupon=${couponsArr[$RANDOM % ${#couponsArr[@]}]};
+    selectedProduct=${productsArr[$RANDOM % ${#productsArr[@]}]};
+    curl -w "\n" -H "Accept: application/json" -H "Content-Type:application/json" -X POST --data '{"cartId": "TestUserCart", "productId": "'$selectedProduct'", "quantity": "1", "couponId": "'$selectedCoupon'"}' "http://localhost:8080/promotion/" &
     echo " ";
     x=$(( $x + 1 ));
 done
+```
+
+## Warm the cache:
+```bash
+curl -w "\n" "http://localhost:8080/promotion/warmCache/";
 ```

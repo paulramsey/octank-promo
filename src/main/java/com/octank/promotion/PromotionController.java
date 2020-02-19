@@ -31,11 +31,33 @@ public class PromotionController {
 	@Value("${database.password}") String dbPass;
 	@Value("${database.connection.string}") String connectionString;
 	@Value("${database.driver}") String dbDriver;
+	@Value("${cache.ttl.seconds}") int cacheTTL;
 
 	// Get mapping for basic sanity check
 	@GetMapping
 	public String index() {
 		String rtrn = "You called the Promotion microservice!";
+		return rtrn;
+	}
+
+	@GetMapping("/warmCache")
+	public String warmCacheController() {
+		String[] couponArr = {"10000", "10001", "10002", "10003", "10004", "10005", "10006", "10007", "10008", "10009"};
+		String[] productArr = {"20000", "20001", "20002", "20003", "20004"};
+
+		// Warm the coupon cache
+		for (String coupon : couponArr) {
+			isCouponValid(coupon, dbDriver, connectionString, dbUser, dbPass, redisConn, cacheEnabled, cacheTTL);
+		};
+
+		// Warm the coupon product details cache
+		for (String product : productArr) {
+			for (String coupon : couponArr) {
+				couponProductDetails(coupon, product, dbDriver, connectionString, dbUser, dbPass, redisConn, cacheEnabled, cacheTTL);
+			}
+		}
+
+		String rtrn = "You warmed the cache.";
 		return rtrn;
 	}
 
@@ -63,11 +85,11 @@ public class PromotionController {
 		*/
 
 		// Check if coupon is valid
-		String couponValid = isCouponValid(couponId, dbDriver, connectionString, dbUser, dbPass, redisConn, cacheEnabled);
+		String couponValid = isCouponValid(couponId, dbDriver, connectionString, dbUser, dbPass, redisConn, cacheEnabled, cacheTTL);
 
 		// If coupon is valid, check whether it applies to the product passed in the request
 		if (couponValid.equals("true")) {
-			Map<String, String> productDetails = couponProductDetails(couponId, productId, dbDriver, connectionString, dbUser, dbPass, redisConn, cacheEnabled);
+			Map<String, String> productDetails = couponProductDetails(couponId, productId, dbDriver, connectionString, dbUser, dbPass, redisConn, cacheEnabled, cacheTTL);
 			productEligible = productDetails.get("productEligible");
 			if (productEligible.equals("true")) {
 				discountAmount = productDetails.get("discountAmount");
@@ -97,7 +119,7 @@ public class PromotionController {
 
 
 	// Check if the coupon is valid
-	private static String isCouponValid(String couponId, String dbDriver, String connectionString, String dbUser, String dbPass, String redisConn, boolean cacheEnabled) {
+	private static String isCouponValid(String couponId, String dbDriver, String connectionString, String dbUser, String dbPass, String redisConn, boolean cacheEnabled, int cacheTTL) {
 		// Check cache/database to check whether coupon is valid
 		// Query database
 		String valid = "false";
@@ -119,7 +141,7 @@ public class PromotionController {
 		
 		if (redisResult != null) {
 			valid = redisResult;
-			//System.out.println("Got value for Valid from cache!");
+			System.out.println("Got value for Valid from cache!");
 		} else {
 			try {
 				// create our mysql database connection
@@ -150,7 +172,7 @@ public class PromotionController {
 					// Save the value to cache
 					Jedis j = new Jedis(redisConn, 6379);
 					j.set(query, valid);
-					j.expire(query, 60);
+					j.expire(query, cacheTTL);
 					//System.out.println("Storing string " + j.get(query) + " in redis for key " + query);
 					j.close();	
 				}
@@ -165,7 +187,7 @@ public class PromotionController {
 	}
 
 	// Get product promotion details
-	private static Map<String, String> couponProductDetails(String couponId, String productId, String dbDriver, String connectionString, String dbUser, String dbPass, String redisConn, boolean cacheEnabled) {
+	private static Map<String, String> couponProductDetails(String couponId, String productId, String dbDriver, String connectionString, String dbUser, String dbPass, String redisConn, boolean cacheEnabled, int cacheTTL) {
 		// Check cache/database to check whether coupon applies to product
 		String productEligible = "false";
 		String discountAmount = "0.00";
@@ -189,7 +211,7 @@ public class PromotionController {
 			String[] splitResult = redisResult.split("_");
 			productEligible = splitResult[0];
 			discountAmount = splitResult[1];
-			//System.out.println("Got value for productEligible and discountAmount from cache!");
+			System.out.println("Got value for productEligible and discountAmount from cache!");
 		} else {
 			try {
 				// create our mysql database connection
@@ -221,7 +243,7 @@ public class PromotionController {
 					// Save the value to cache
 					Jedis j = new Jedis(redisConn, 6379);
 					j.set(query, productEligible + "_" + discountAmount);
-					j.expire(query, 60);
+					j.expire(query, cacheTTL);
 					j.close();
 				}
 				
