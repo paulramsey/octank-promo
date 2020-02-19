@@ -38,7 +38,9 @@ public class PromotionController {
 	// Get mapping for basic sanity check
 	@GetMapping
 	public String index() {
+		AWSXRay.beginSubsegment("Test liveness");
 		String rtrn = "You called the Promotion microservice!";
+		AWSXRay.endSubsegment();
 		return rtrn;
 	}
 
@@ -48,16 +50,20 @@ public class PromotionController {
 		String[] productArr = {"20000", "20001", "20002", "20003", "20004"};
 
 		// Warm the coupon cache
+		AWSXRay.beginSubsegment("Warm Coupon cache");
 		for (String coupon : couponArr) {
 			isCouponValid(coupon, dbDriver, connectionString, dbUser, dbPass, redisConn, cacheEnabled, cacheTTL);
 		};
+		AWSXRay.endSubsegment();
 
 		// Warm the coupon product details cache
+		AWSXRay.beginSubsegment("Warm Coupon Product Details cache");
 		for (String product : productArr) {
 			for (String coupon : couponArr) {
 				couponProductDetails(coupon, product, dbDriver, connectionString, dbUser, dbPass, redisConn, cacheEnabled, cacheTTL);
 			}
 		}
+		AWSXRay.endSubsegment();
 
 		String rtrn = "You warmed the cache.";
 		return rtrn;
@@ -87,9 +93,12 @@ public class PromotionController {
 		*/
 
 		// Check if coupon is valid
+		AWSXRay.beginSubsegment("Check if coupon " + couponId + " is valid");
 		String couponValid = isCouponValid(couponId, dbDriver, connectionString, dbUser, dbPass, redisConn, cacheEnabled, cacheTTL);
+		AWSXRay.endSubsegment();
 
 		// If coupon is valid, check whether it applies to the product passed in the request
+		AWSXRay.beginSubsegment("Check if coupon " + couponId + " applies to item from cart");
 		if (couponValid.equals("true")) {
 			Map<String, String> productDetails = couponProductDetails(couponId, productId, dbDriver, connectionString, dbUser, dbPass, redisConn, cacheEnabled, cacheTTL);
 			productEligible = productDetails.get("productEligible");
@@ -97,6 +106,7 @@ public class PromotionController {
 				discountAmount = productDetails.get("discountAmount");
 			}  
 		}
+		AWSXRay.endSubsegment();
 		
 		// Return response payload
 		return new ResponseObject(cartId, productId, couponId, productEligible, couponValid, discountAmount);
@@ -134,18 +144,21 @@ public class PromotionController {
 		//System.out.println("Server is running: "+j.ping()); 
 		
 		String redisResult = null;
-
+		
 		if (cacheEnabled) {
+			AWSXRay.beginSubsegment("Check cache for coupon " + couponId);
 			Jedis j = new Jedis(redisConn, 6379);
 			redisResult = j.get(query);
 			j.close();
+			AWSXRay.endSubsegment();
 		}
 		
 		if (redisResult != null) {
 			valid = redisResult;
-			System.out.println("Got value for Valid from cache!");
+			//System.out.println("Got value for Valid from cache!");
 		} else {
 			try {
+				AWSXRay.beginSubsegment("Get coupon " + couponId + " from database");
 				// create our mysql database connection
 				Class.forName(dbDriver);
 				Connection conn = DriverManager.getConnection(connectionString, dbUser, dbPass);
@@ -163,20 +176,23 @@ public class PromotionController {
 					
 					// print the results
 					//System.out.format("%s, %s\n", couponId, valid);
-					System.out.println("Cache miss or cache disabled. Data retrieved from database.");
+					//System.out.println("Cache miss or cache disabled. Data retrieved from database.");
 				}
 				
 				rs.close();
 				st.close();
 				conn.close();
+				AWSXRay.endSubsegment();
 
 				if (cacheEnabled) {
 					// Save the value to cache
+					AWSXRay.beginSubsegment("Save data to cache for coupon " + couponId);
 					Jedis j = new Jedis(redisConn, 6379);
 					j.set(query, valid);
 					j.expire(query, cacheTTL);
 					//System.out.println("Storing string " + j.get(query) + " in redis for key " + query);
 					j.close();	
+					AWSXRay.endSubsegment();
 				}
 			}
 			catch (Exception e) {
@@ -204,18 +220,21 @@ public class PromotionController {
 		// Connect to redis if enabled
 		String redisResult = null;
 		if (cacheEnabled) {
+			AWSXRay.beginSubsegment("Check cache if coupon " + couponId + " applies to product " + productId);
 			Jedis j = new Jedis(redisConn, 6379);
 			redisResult = j.get(query);
 			j.close();
+			AWSXRay.endSubsegment();
 		} 
 
 		if (redisResult != null) {
 			String[] splitResult = redisResult.split("_");
 			productEligible = splitResult[0];
 			discountAmount = splitResult[1];
-			System.out.println("Got value for productEligible and discountAmount from cache!");
+			//System.out.println("Got value for productEligible and discountAmount from cache!");
 		} else {
 			try {
+				AWSXRay.beginSubsegment("Get coupon product details data from database for coupon " + couponId + " and product " + productId);
 				// create our mysql database connection
 				Class.forName(dbDriver);
 				Connection conn = DriverManager.getConnection(connectionString, dbUser, dbPass);
@@ -233,20 +252,23 @@ public class PromotionController {
 					discountAmount = String.valueOf(rs.getDouble("discount_amount"));
 					// print the results
 					//System.out.format("%s, %s\n", productEligible, discountAmount);
-					System.out.println("Cache miss or cache disabled. Data retrieved from database.");
+					//System.out.println("Cache miss or cache disabled. Data retrieved from database.");
 				}
 				
 				// Close DB objects
 				rs.close();
 				st.close();
 				conn.close();
+				AWSXRay.endSubsegment();
 
 				if (cacheEnabled) {
 					// Save the value to cache
+					AWSXRay.beginSubsegment("Save coupon product details data to cache for coupon " + couponId + " and product " + productId);
 					Jedis j = new Jedis(redisConn, 6379);
 					j.set(query, productEligible + "_" + discountAmount);
 					j.expire(query, cacheTTL);
 					j.close();
+					AWSXRay.endSubsegment();
 				}
 				
 
