@@ -1,7 +1,14 @@
 package com.octank.promotion;
 
 import java.util.Arrays;
+import java.util.Map;
 
+import com.amazonaws.xray.entities.Subsegment;
+import com.amazonaws.xray.spring.aop.AbstractXRayInterceptor;
+
+import org.aspectj.lang.ProceedingJoinPoint;
+import org.aspectj.lang.annotation.Aspect;
+import org.aspectj.lang.annotation.Pointcut;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
@@ -10,6 +17,7 @@ import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.web.servlet.support.SpringBootServletInitializer;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
+import org.springframework.stereotype.Component;
 
 @SpringBootApplication
 public class PromotionApplication extends SpringBootServletInitializer {
@@ -22,6 +30,20 @@ public class PromotionApplication extends SpringBootServletInitializer {
 	}
 	public static void main(String[] args) {
 		SpringApplication.run(PromotionApplication.class, args);
+	}
+
+	@Aspect
+	@Component
+	public class XRayInspector extends AbstractXRayInterceptor {    
+		@Override    
+		protected Map<String, Map<String, Object>> generateMetadata(ProceedingJoinPoint proceedingJoinPoint, Subsegment subsegment) {      
+			return super.generateMetadata(proceedingJoinPoint, subsegment);    
+	}    
+	
+	@Override    
+	@Pointcut("@within(com.amazonaws.xray.spring.aop.XRayEnabled) && bean(*Controller)")    
+	public void xrayEnabledClasses() {}
+	
 	}
 
 	@Bean
