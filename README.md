@@ -98,3 +98,17 @@ done
 ```bash
 curl -w "\n" "http://localhost:8080/promotion/warmCache/";
 ```
+
+## Run X-Ray daemon locally for development:
+```bash
+cd deploy/xray-local
+docker build -t xray-daemon .
+docker run \
+      --attach STDOUT \
+      -v ~/.aws/:/root/.aws/:ro \
+      -e AWS_REGION=us-east-2 \
+      --name xray-daemon \
+      -p 2000:2000/udp \
+      -p 2000:2000/tcp \
+      xray-daemon -o
+```
