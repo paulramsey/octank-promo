@@ -27,7 +27,7 @@
           - export AWS_SESSION_TOKEN="$(echo ${CREDENTIALS} | jq -r '.Credentials.SessionToken')"
           - export AWS_EXPIRATION=$(echo ${CREDENTIALS} | jq -r '.Credentials.Expiration')
           - aws eks update-kubeconfig --name $EKS_CLUSTER_NAME
-          - kubectl deploy/kubernetes/kube-deploy.yml
+          - kubectl apply deploy/kubernetes/kube-deploy.yml
           - printf '[{"name":"kube-deploy","imageUri":"%s"}]' $REPOSITORY_URI:$TAG > build.json
     artifacts:
       files: build.json
