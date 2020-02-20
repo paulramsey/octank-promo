@@ -34,28 +34,9 @@ Example API response:
 - Clone repo
 - Update `<aws-account-number>` with your real AWS account number in the deploy steps below and in `./deploy/kubernetes/ecr-login.sh`. Change the AWS region throughout if desired.
 
-## Run locally via Maven
-- From project root, run: `./mvnw spring-boot:run`
-- Navigate to: `http://localhost:8080/promotion/`
+## Examples
 
-## Build Docker container 
-- From project root, run: `./mvnw clean package && docker build --tag=promotion .`
-
-## Run locally via Docker with Wildfly
-- Run: `docker run -it -p 8080:8080 promotion`  
-- Navigate to: `http://localhost:8080/promotion/`
-
-## Deploy to Kubernetes with Wildfly
-- Push image to ECR:  
-`$(aws ecr get-login --no-include-email --region us-east-2)`  
-`docker tag promotion:latest <aws-account-number>.dkr.ecr.us-east-2.amazonaws.com/promotion:latest`  
-`docker push <aws-account-number>.dkr.ecr.us-east-2.amazonaws.com/promotion:latest` 
-- Deploy to K8s cluster:  
-`./deploy/kubernetes/ecr-login.sh`   
-`kubectl apply -f deploy/kubernetes/kube-deploy.yaml`
-- Navigate to: `http://localhost:30001/promotion/`
-
-## Example POST call:
+Example curl POST call:
 ```bash
 curl -i \
 -H "Accept: application/json" \
@@ -63,7 +44,13 @@ curl -i \
 -X POST --data '{"cartId": "208474", "productId": "12345", "quantity": "9", "couponId": "10000"}' "http://localhost:8080/promotion/"
 ```
 
-## Generate some load:
+Warming the cache:
+```bash
+curl -w "\n" "http://localhost:8080/promotion/warmCache/";
+```
+
+## Generate Load
+To generate load on the API:
 - Place the script below in a file called `promotion-generate-load.sh`.
 - Call the script with a single argument that defines how many times to call the service: `./promotion-generate-load.sh 1000`
 
@@ -94,12 +81,30 @@ do
 done
 ```
 
-## Warm the cache:
-```bash
-curl -w "\n" "http://localhost:8080/promotion/warmCache/";
-```
+## Deployment
 
-## Run X-Ray daemon locally for development:
+### Run locally via Maven
+- From project root, run: `./mvnw spring-boot:run`
+- Navigate to: `http://localhost:8080/promotion/`
+
+### Build Docker container 
+- From project root, run: `./mvnw clean package && docker build --tag=promotion .`
+
+### Run locally via Docker with Wildfly
+- Run: `docker run -it -p 8080:8080 promotion`  
+- Navigate to: `http://localhost:8080/promotion/`
+
+### Deploy to Kubernetes with Wildfly
+- Push image to ECR:  
+`$(aws ecr get-login --no-include-email --region us-east-2)`  
+`docker tag promotion:latest <aws-account-number>.dkr.ecr.us-east-2.amazonaws.com/promotion:latest`  
+`docker push <aws-account-number>.dkr.ecr.us-east-2.amazonaws.com/promotion:latest` 
+- Deploy to K8s cluster:  
+`./deploy/kubernetes/ecr-login.sh`   
+`kubectl apply -f deploy/kubernetes/kube-deploy.yaml`
+- Navigate to: `http://localhost:30001/promotion/`
+
+### Run X-Ray daemon locally for development:
 ```bash
 cd deploy/xray-local
 docker build -t xray-daemon .
@@ -112,3 +117,9 @@ docker run \
       -p 2000:2000/tcp \
       xray-daemon -o
 ```
+
+### Deploy X-Ray daemon image to ECR
+- Push image to ECR:  
+`$(aws ecr get-login --no-include-email --region us-east-2)`  
+`docker tag xray-daemon:latest <aws-account-number>.dkr.ecr.us-east-2.amazonaws.com/xray-daemon:latest`  
+`docker push <aws-account-number>.dkr.ecr.us-east-2.amazonaws.com/xray-daemon:latest` 
