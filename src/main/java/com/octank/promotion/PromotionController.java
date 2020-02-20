@@ -7,18 +7,22 @@ import java.sql.Statement;
 import java.util.HashMap;
 import java.util.Map;
 
+import javax.servlet.http.HttpServletResponse;
+
 import com.amazonaws.xray.AWSXRay;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.server.WebServerFactoryCustomizer;
 import org.springframework.boot.web.servlet.server.ConfigurableServletWebServerFactory;
 import org.springframework.context.annotation.Bean;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.client.HttpClientErrorException;
 
 import redis.clients.jedis.Jedis;
 
@@ -35,6 +39,14 @@ public class PromotionController {
 	@Value("${database.driver}") String dbDriver;
 	@Value("${cache.ttl.seconds}") int cacheTTL;
 
+	// Set error response status
+	/*
+	@ResponseStatus(code = HttpStatus.INTERNAL_SERVER_ERROR)
+	class CustomException extends Exception {
+		private static final long serialVersionUID = 1L;
+	};
+	*/
+
 	// Get mapping for basic sanity check
 	@GetMapping
 	public String index() {
@@ -45,34 +57,41 @@ public class PromotionController {
 	}
 
 	@GetMapping("/warmCache")
-	public String warmCacheController() {
-		String[] couponArr = {"10000", "10001", "10002", "10003", "10004", "10005", "10006", "10007", "10008", "10009"};
-		String[] productArr = {"20000", "20001", "20002", "20003", "20004"};
+	public String warmCacheController() throws Exception {
+		String rtrn;
+		
+		if (!cacheEnabled) {
+			rtrn = "Cache is disabled. Nothing to do.";
+		} else {
+			String[] couponArr = {"10000", "10001", "10002", "10003", "10004", "10005", "10006", "10007", "10008", "10009"};
+			String[] productArr = {"20000", "20001", "20002", "20003", "20004"};
 
-		// Warm the coupon cache
-		AWSXRay.beginSubsegment("Warm Coupon cache");
-		for (String coupon : couponArr) {
-			isCouponValid(coupon, dbDriver, connectionString, dbUser, dbPass, redisConn, cacheEnabled, cacheTTL);
-		};
-		AWSXRay.endSubsegment();
-
-		// Warm the coupon product details cache
-		AWSXRay.beginSubsegment("Warm Coupon Product Details cache");
-		for (String product : productArr) {
+			// Warm the coupon cache
+			AWSXRay.beginSubsegment("Warm Coupon cache");
 			for (String coupon : couponArr) {
-				couponProductDetails(coupon, product, dbDriver, connectionString, dbUser, dbPass, redisConn, cacheEnabled, cacheTTL);
-			}
-		}
-		AWSXRay.endSubsegment();
+				isCouponValid(coupon, dbDriver, connectionString, dbUser, dbPass, redisConn, cacheEnabled, cacheTTL);
+			};
+			AWSXRay.endSubsegment();
 
-		String rtrn = "You warmed the cache.";
+			// Warm the coupon product details cache
+			AWSXRay.beginSubsegment("Warm Coupon Product Details cache");
+			for (String product : productArr) {
+				for (String coupon : couponArr) {
+					couponProductDetails(coupon, product, dbDriver, connectionString, dbUser, dbPass, redisConn, cacheEnabled, cacheTTL);
+				}
+			}
+			AWSXRay.endSubsegment();
+
+			rtrn = "You warmed the cache.";
+		}
+		
 		return rtrn;
 	}
 
 	// Post mapping for main functionality
 	@PostMapping
 	@ResponseBody
-	public ResponseObject postResponseController(@RequestBody CartData cartData) {
+	public ResponseObject postResponseController(@RequestBody CartData cartData, HttpServletResponse response) throws Exception {
 
 		// Initialize variable defaults
 		String cartId = cartData.cartId;
@@ -80,6 +99,9 @@ public class PromotionController {
 		String couponId = cartData.couponId;
 		String discountAmount = "0.00";
 		String productEligible = "false";
+
+		// Placehold for error messages
+		String errMessage = "";
 
 		/*
 		// Test redis
@@ -94,7 +116,11 @@ public class PromotionController {
 
 		// Check if coupon is valid
 		AWSXRay.beginSubsegment("Check if coupon " + couponId + " is valid");
-		String couponValid = isCouponValid(couponId, dbDriver, connectionString, dbUser, dbPass, redisConn, cacheEnabled, cacheTTL);
+		Map<String, String> couponData = isCouponValid(couponId, dbDriver, connectionString, dbUser, dbPass, redisConn, cacheEnabled, cacheTTL);
+		String couponValid = couponData.get("valid");
+		if (!couponData.get("errMessage").equals("")) {
+			errMessage = couponData.get("errMessage");
+		}
 		AWSXRay.endSubsegment();
 
 		// If coupon is valid, check whether it applies to the product passed in the request
@@ -104,12 +130,21 @@ public class PromotionController {
 			productEligible = productDetails.get("productEligible");
 			if (productEligible.equals("true")) {
 				discountAmount = productDetails.get("discountAmount");
-			}  
+			}
+			if (!productDetails.get("errMessage").equals("")) {
+				errMessage += productDetails.get("errMessage");
+			}
 		}
 		AWSXRay.endSubsegment();
 		
 		// Return response payload
-		return new ResponseObject(cartId, productId, couponId, productEligible, couponValid, discountAmount);
+		ResponseObject responseObject = new ResponseObject(cartId, productId, couponId, productEligible, couponValid, discountAmount);
+		
+		if (!errMessage.equals("")) {
+			response.setStatus(503);
+		}
+		
+		return responseObject;
 	}
 
 	@Bean
@@ -131,10 +166,13 @@ public class PromotionController {
 
 
 	// Check if the coupon is valid
-	private static String isCouponValid(String couponId, String dbDriver, String connectionString, String dbUser, String dbPass, String redisConn, boolean cacheEnabled, int cacheTTL) {
+	private static Map<String, String> isCouponValid(String couponId, String dbDriver, String connectionString, String dbUser, String dbPass, String redisConn, boolean cacheEnabled, int cacheTTL) throws Exception {
 		// Check cache/database to check whether coupon is valid
 		// Query database
 		String valid = "false";
+
+		// Initialize variable to hold error so we can bubble it up to response
+		String errMessage = "";
 
 		// our SQL SELECT query. 
 		// if you only need a few columns, specify them by name instead of using "*"
@@ -159,6 +197,7 @@ public class PromotionController {
 		} else {
 			try {
 				AWSXRay.beginSubsegment("Get coupon " + couponId + " from database");
+				
 				// create our mysql database connection
 				Class.forName(dbDriver);
 				Connection conn = DriverManager.getConnection(connectionString, dbUser, dbPass);
@@ -198,17 +237,26 @@ public class PromotionController {
 			catch (Exception e) {
 				System.err.println("Coupon query failed! ");
 				System.err.println(e.getMessage());
+				errMessage = e.getMessage();
 			}
 		}
 
-		return valid;
+		Map<String, String> returnObject = new HashMap<String, String>();
+		returnObject.put("valid", valid);
+		returnObject.put("errMessage", errMessage);
+		
+		return returnObject;
 	}
 
 	// Get product promotion details
-	private static Map<String, String> couponProductDetails(String couponId, String productId, String dbDriver, String connectionString, String dbUser, String dbPass, String redisConn, boolean cacheEnabled, int cacheTTL) {
+	private static Map<String, String> couponProductDetails(String couponId, String productId, String dbDriver, String connectionString, String dbUser, String dbPass, String redisConn, boolean cacheEnabled, int cacheTTL)
+			throws Exception {
 		// Check cache/database to check whether coupon applies to product
 		String productEligible = "false";
 		String discountAmount = "0.00";
+
+		// Initialize variable to hold error so we can bubble it up to response
+		String errMessage = "";
 
 		// our SQL SELECT query. 
 		// if you only need a few columns, specify them by name instead of using "*"
@@ -258,7 +306,7 @@ public class PromotionController {
 				// Close DB objects
 				rs.close();
 				st.close();
-				conn.close();
+				//conn.close();
 				AWSXRay.endSubsegment();
 
 				if (cacheEnabled) {
@@ -276,14 +324,14 @@ public class PromotionController {
 			catch (Exception e) {
 				System.err.println("Coupon query failed! ");
 				System.err.println(e.getMessage());
+				errMessage = e.getMessage();
 			}
 		}
-		
-		
 		
 		Map<String, String> returnObject = new HashMap<String, String>();
 		returnObject.put("productEligible", productEligible);
 		returnObject.put("discountAmount", discountAmount);
+		returnObject.put("errMessage", errMessage);
 		
 		return returnObject;
 	}

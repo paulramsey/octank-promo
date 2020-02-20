@@ -4,7 +4,6 @@ import java.util.Arrays;
 
 import javax.servlet.Filter;
 import com.amazonaws.xray.javax.servlet.AWSXRayServletFilter;
-import com.amazonaws.xray.strategy.DynamicSegmentNamingStrategy;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
@@ -51,7 +50,7 @@ public class PromotionApplication extends SpringBootServletInitializer {
 
 		@Bean
 		public Filter TracingFilter() {
-			return new AWSXRayServletFilter(new DynamicSegmentNamingStrategy("/promotion", "*.example.com"));
+			return new AWSXRayServletFilter("/promotion");
 		}
 	}
 
