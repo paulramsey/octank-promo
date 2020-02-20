@@ -5,6 +5,14 @@ metadata:
   namespace: sock-shop
 spec:
   replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: hello-k8s
   template:
     metadata:
       labels:
