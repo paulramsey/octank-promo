@@ -26,6 +26,21 @@ spec:
             drop:
               - all
           readOnlyRootFilesystem: false
+      - name: xray-daemon
+        image: 715977739758.dkr.ecr.us-east-2.amazonaws.com/xray-daemon:latest
+        resources:
+          requests:
+            cpu: 100m
+            memory: 100Mi
+        ports:
+        - containerPort: 2000
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+              - all
+          readOnlyRootFilesystem: false
       nodeSelector:
         beta.kubernetes.io/os: linux
       imagePullSecrets:

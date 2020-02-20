@@ -43,10 +43,11 @@ Example API response:
 
 Example curl POST call:
 ```bash
-curl -i \
+curl -w "\n" -i \
 -H "Accept: application/json" \
 -H "Content-Type:application/json" \
--X POST --data '{"cartId": "208474", "productId": "12345", "quantity": "9", "couponId": "10000"}' "http://localhost:8080/promotion/"
+-X POST \
+--data '{"cartId": "TestCartId", "productId": "20001", "quantity": "1", "couponId": "10001"}' "http://promo:8080/promotion/"
 ```
 
 Warming the cache:
