@@ -2,6 +2,11 @@
 
 Bare-bones Spring Boot microservice used for demo purposes. Not supported - no warranty explicit or implied.
 
+This solution leverages:
+- Spring Boot 2.3.0.M2
+- Java 1.8
+- JBoss Wildfly 18.0.1.Final (Formerly JBoss Application Server)
+
 API checks whether the coupon code applied at checkout is valid and applies to the products in the user's cart.
 
 Example cart data POST input:
