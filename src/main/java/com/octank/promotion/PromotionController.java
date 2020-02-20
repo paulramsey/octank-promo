@@ -142,8 +142,10 @@ public class PromotionController {
 		
 		if (!errMessage.equals("")) {
 			response.setStatus(503);
+			ResponseObject errResponse = new ResponseObject("Error", "Error", "Error", "Error", "Error", "Error");
+			return errResponse;
 		}
-		
+
 		return responseObject;
 	}
 
@@ -306,7 +308,7 @@ public class PromotionController {
 				// Close DB objects
 				rs.close();
 				st.close();
-				//conn.close();
+				conn.close();
 				AWSXRay.endSubsegment();
 
 				if (cacheEnabled) {
