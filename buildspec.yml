@@ -15,20 +15,21 @@ phases:
       - apt-get install -y maven
   pre_build:
     commands:
-      - TAG="latest"
+      - cp ./deploy/kubernetes/kube-deploy.yaml .
+      - TAG="$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | head -c 8)"
+      - sed -i 's@promotion:latest@'"promotion:$TAG"'@' kube-deploy.yaml
       - $(aws ecr get-login --no-include-email --region us-east-2)
       - export KUBECONFIG=$HOME/.kube/config
   build:
     commands:
-      - cp ./deploy/kubernetes/kube-deploy.yaml .
       - ./mvnw clean package
-      - docker build --tag=promotion:latest .
-      - docker tag promotion:latest 715977739758.dkr.ecr.us-east-2.amazonaws.com/promotion:latest
+      - docker build --tag=promotion:$TAG .
+      - docker tag promotion:$TAG 715977739758.dkr.ecr.us-east-2.amazonaws.com/promotion:$TAG
 
   post_build:
     commands:
       - $(aws ecr get-login --no-include-email --region us-east-2)
-      - docker push 715977739758.dkr.ecr.us-east-2.amazonaws.com/promotion:latest
+      - docker push 715977739758.dkr.ecr.us-east-2.amazonaws.com/promotion:$TAG
       - CREDENTIALS=$(aws sts assume-role --role-arn $EKS_KUBECTL_ROLE_ARN --role-session-name codebuild-kubectl --duration-seconds 900)
       - export AWS_ACCESS_KEY_ID="$(echo ${CREDENTIALS} | jq -r '.Credentials.AccessKeyId')"
       - export AWS_SECRET_ACCESS_KEY="$(echo ${CREDENTIALS} | jq -r '.Credentials.SecretAccessKey')"
@@ -36,6 +37,6 @@ phases:
       - export AWS_EXPIRATION=$(echo ${CREDENTIALS} | jq -r '.Credentials.Expiration')
       - aws eks update-kubeconfig --name $EKS_CLUSTER_NAME
       - kubectl apply -f kube-deploy.yaml
-      - printf '[{"name":"kube-deploy","imageUri":"%s"}]' 715977739758.dkr.ecr.us-east-2.amazonaws.com/promotion:latest > build.json
+      - printf '[{"name":"kube-deploy","imageUri":"%s"}]' 715977739758.dkr.ecr.us-east-2.amazonaws.com/promotion:$TAG > build.json
 artifacts:
   files: build.json
