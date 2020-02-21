@@ -17,7 +17,7 @@
       build:
         commands:
           - ./mvnw clean package && docker build --tag=promotion .
-          - docker tag tax-calc:latest 715977739758.dkr.ecr.us-east-2.amazonaws.com/promotion:latest
+          - docker tag promotion:latest 715977739758.dkr.ecr.us-east-2.amazonaws.com/promotion:latest
     
       post_build:
         commands:
