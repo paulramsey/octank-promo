@@ -10,19 +10,19 @@
           - apt-get update && apt-get -y install jq python3-pip python3-dev && pip3 install --upgrade awscli
       pre_build:
           commands:
-            - TAG="$REPOSITORY_NAME.$REPOSITORY_BRANCH.$ENVIRONMENT_NAME.$(date +%Y-%m-%d.%H.%M.%S).$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | head -c 8)"
-            - sed -i 's@715977739758.dkr.ecr.us-east-2.amazonaws.com/promotion:latest@'"$REPOSITORY_URI:$TAG"'@' deploy/kubernetes/kube-deploy.yaml
-            - $(aws ecr get-login --no-include-email)
+            - TAG="latest"
+            - $(aws ecr get-login --no-include-email --region us-east-2)
             - export KUBECONFIG=$HOME/.kube/config
       build:
         commands:
           - ./mvnw clean package
-          - docker build --tag $REPOSITORY_URI:$TAG .
+          - docker build --tag=promotion:latest .
           - docker tag promotion:latest 715977739758.dkr.ecr.us-east-2.amazonaws.com/promotion:latest
     
       post_build:
         commands:
-          - docker push $REPOSITORY_URI:$TAG
+          - $(aws ecr get-login --no-include-email --region us-east-2)
+          - docker push 715977739758.dkr.ecr.us-east-2.amazonaws.com/promotion:latest
           - CREDENTIALS=$(aws sts assume-role --role-arn $EKS_KUBECTL_ROLE_ARN --role-session-name codebuild-kubectl --duration-seconds 900)
           - export AWS_ACCESS_KEY_ID="$(echo ${CREDENTIALS} | jq -r '.Credentials.AccessKeyId')"
           - export AWS_SECRET_ACCESS_KEY="$(echo ${CREDENTIALS} | jq -r '.Credentials.SecretAccessKey')"
