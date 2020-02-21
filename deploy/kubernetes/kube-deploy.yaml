@@ -12,7 +12,7 @@ spec:
       maxSurge: 1
   selector:
     matchLabels:
-      app: hello-k8s
+      app: promotion
   template:
     metadata:
       labels:
