@@ -11,17 +11,18 @@
       pre_build:
           commands:
             - TAG="$REPOSITORY_NAME.$REPOSITORY_BRANCH.$ENVIRONMENT_NAME.$(date +%Y-%m-%d.%H.%M.%S).$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | head -c 8)"
-            - sed -i 's@CONTAINER_IMAGE@'"$REPOSITORY_URI:$TAG"'@' deploy/kubernetes/kube-deploy.yaml
+            - sed -i 's@715977739758.dkr.ecr.us-east-2.amazonaws.com/promotion:latest@'"$REPOSITORY_URI:$TAG"'@' deploy/kubernetes/kube-deploy.yaml
             - $(aws ecr get-login --no-include-email)
             - export KUBECONFIG=$HOME/.kube/config
       build:
         commands:
-          - ./mvnw clean package && docker build --tag=promotion .
+          - ./mvnw clean package
+          - docker build --tag $REPOSITORY_URI:$TAG .
           - docker tag promotion:latest 715977739758.dkr.ecr.us-east-2.amazonaws.com/promotion:latest
     
       post_build:
         commands:
-          - docker push 715977739758.dkr.ecr.us-east-2.amazonaws.com/promotion:latest
+          - docker push $REPOSITORY_URI:$TAG
           - CREDENTIALS=$(aws sts assume-role --role-arn $EKS_KUBECTL_ROLE_ARN --role-session-name codebuild-kubectl --duration-seconds 900)
           - export AWS_ACCESS_KEY_ID="$(echo ${CREDENTIALS} | jq -r '.Credentials.AccessKeyId')"
           - export AWS_SECRET_ACCESS_KEY="$(echo ${CREDENTIALS} | jq -r '.Credentials.SecretAccessKey')"
