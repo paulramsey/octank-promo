@@ -12,7 +12,7 @@ spec:
       maxSurge: 1
   selector:
     matchLabels:
-      app: promotion
+      name: promotion
   template:
     metadata:
       labels:
